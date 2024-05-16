@@ -31,6 +31,16 @@ import logging
 
 logging.basicConfig(level=logging.WARNING)
 
+from torch.backends.cuda import sdp_kernel, SDPBackend
+
+# Helpful arguments mapper
+backend_map = {
+    "math": {"enable_math": True, "enable_flash": False, "enable_mem_efficient": False},
+    "flash": {"enable_math": False, "enable_flash": True, "enable_mem_efficient": False},
+    "mem": {
+        "enable_math": False, "enable_flash": False, "enable_mem_efficient": True},
+    "auto": {"enable_math": False, "enable_flash": True, "enable_mem_efficient": True},
+}
 
 def print_on_rank0(msg):
     if torch.distributed.get_rank() == 0:
@@ -152,6 +162,7 @@ def main(configs, config_yaml_path, exp_group_name, exp_name, perform_validation
     print("==> Save checkpoint every %s steps" % save_checkpoint_every_n_steps)
     print("==> Perform validation every %s epochs" % validation_every_n_epochs)
 
+
     trainer = Trainer(
         accelerator="gpu",
         devices=devices,
@@ -160,48 +171,50 @@ def main(configs, config_yaml_path, exp_group_name, exp_name, perform_validation
         num_sanity_val_steps=1,
         limit_val_batches=limit_val_batches,
         check_val_every_n_epoch=validation_every_n_epochs,
-        strategy=DDPStrategy(find_unused_parameters=True),
+        strategy=DDPStrategy(find_unused_parameters=True, process_group_backend="gloo"),
         callbacks=[checkpoint_callback],
     )
 
-    if is_external_checkpoints:
-        if resume_from_checkpoint is not None:
-            ckpt = torch.load(resume_from_checkpoint)["state_dict"]
 
-            key_not_in_model_state_dict = []
-            size_mismatch_keys = []
-            state_dict = latent_diffusion.state_dict()
-            print("Filtering key for reloading:", resume_from_checkpoint)
-            print(
-                "State dict key size:",
-                len(list(state_dict.keys())),
-                len(list(ckpt.keys())),
+    with sdp_kernel(**backend_map[configs["backend"]]):
+        if is_external_checkpoints:
+            if resume_from_checkpoint is not None:
+                ckpt = torch.load(resume_from_checkpoint)["state_dict"]
+
+                key_not_in_model_state_dict = []
+                size_mismatch_keys = []
+                state_dict = latent_diffusion.state_dict()
+                print("Filtering key for reloading:", resume_from_checkpoint)
+                print(
+                    "State dict key size:",
+                    len(list(state_dict.keys())),
+                    len(list(ckpt.keys())),
+                )
+                for key in tqdm(list(ckpt.keys())):
+                    if key not in state_dict.keys():
+                        key_not_in_model_state_dict.append(key)
+                        del ckpt[key]
+                        continue
+                    if state_dict[key].size() != ckpt[key].size():
+                        del ckpt[key]
+                        size_mismatch_keys.append(key)
+
+                # if(len(key_not_in_model_state_dict) != 0 or len(size_mismatch_keys) != 0):
+                # print("⛳", end=" ")
+
+                # print("==> Warning: The following key in the checkpoint is not presented in the model:", key_not_in_model_state_dict)
+                # print("==> Warning: These keys have different size between checkpoint and current model: ", size_mismatch_keys)
+
+                latent_diffusion.load_state_dict(ckpt, strict=False)
+
+            # if(perform_validation):
+            #     trainer.validate(latent_diffusion, val_loader)
+
+            trainer.fit(latent_diffusion, loader, val_loader)
+        else:
+            trainer.fit(
+                latent_diffusion, loader, val_loader, ckpt_path=resume_from_checkpoint
             )
-            for key in tqdm(list(ckpt.keys())):
-                if key not in state_dict.keys():
-                    key_not_in_model_state_dict.append(key)
-                    del ckpt[key]
-                    continue
-                if state_dict[key].size() != ckpt[key].size():
-                    del ckpt[key]
-                    size_mismatch_keys.append(key)
-
-            # if(len(key_not_in_model_state_dict) != 0 or len(size_mismatch_keys) != 0):
-            # print("⛳", end=" ")
-
-            # print("==> Warning: The following key in the checkpoint is not presented in the model:", key_not_in_model_state_dict)
-            # print("==> Warning: These keys have different size between checkpoint and current model: ", size_mismatch_keys)
-
-            latent_diffusion.load_state_dict(ckpt, strict=False)
-
-        # if(perform_validation):
-        #     trainer.validate(latent_diffusion, val_loader)
-
-        trainer.fit(latent_diffusion, loader, val_loader)
-    else:
-        trainer.fit(
-            latent_diffusion, loader, val_loader, ckpt_path=resume_from_checkpoint
-        )
 
 
 if __name__ == "__main__":
@@ -220,6 +233,15 @@ if __name__ == "__main__":
         required=False,
         default=None,
         help="path to pretrained checkpoint",
+    )
+
+    parser.add_argument(
+        "--backend",
+        type=str,
+        required=False,
+        default="math",
+        help="backend to use for the attention",
+        choices=["math", "flash", "mem", "auto"],
     )
 
     parser.add_argument("--val", action="store_true")
@@ -246,5 +268,7 @@ if __name__ == "__main__":
             "crossattn_audiomae_generated"
         ]["params"]["use_gt_mae_output"] = False
         config_yaml["step"]["limit_val_batches"] = None
+
+    config_yaml["backend"] = args.backend
 
     main(config_yaml, config_yaml_path, exp_group_name, exp_name, perform_validation)

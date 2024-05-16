@@ -148,7 +148,7 @@ class AudioDataset(Dataset):
         while True:
             try:
                 label_indices = np.zeros(self.label_num, dtype=np.float32)
-                datum = self.data[index]
+                datum = self.data[index]    # {"wav", "labels", "caption", "seg_label"}
                 (
                     log_mel_spec,
                     stft,
@@ -253,7 +253,7 @@ class AudioDataset(Dataset):
             data_json = self._relative_path_to_absolute_path(
                 data_json, self.dataset_name
             )
-            self.data = data_json["data"]
+            self.data = data_json["data"]   # self.data has audiocaps_train_label.json content with absolute path
         elif type(self.dataset_name) is list:
             for dataset_name in self.dataset_name:
                 data_json = load_json(
@@ -440,7 +440,7 @@ class AudioDataset(Dataset):
         return log_mel_spec, stft, waveform, random_start
 
     def get_sample_text_caption(self, datum, mix_datum, label_indices):
-        text = self.label_indices_to_text(datum, label_indices)
+        text = self.label_indices_to_text(datum, label_indices) # caption if exist, else label to caption
         if mix_datum is not None:
             text += " " + self.label_indices_to_text(mix_datum, label_indices)
         return text

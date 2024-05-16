@@ -675,12 +675,16 @@ class DDPM(pl.LightningModule):
                 self.cond_stage_model_metadata[key][
                     "embed_mode_orig"
                 ] = self.cond_stage_models[model_idx].embed_mode
-                if torch.randn(1).item() < 0.5:
-                    self.cond_stage_model_metadata[key]["cond_stage_key"] = "text"
-                    self.cond_stage_models[model_idx].embed_mode = "text"
-                else:
-                    self.cond_stage_model_metadata[key]["cond_stage_key"] = "waveform"
-                    self.cond_stage_models[model_idx].embed_mode = "audio"
+                # if torch.randn(1).item() < 0.5:
+                #     self.cond_stage_model_metadata[key]["cond_stage_key"] = "text"
+                #     self.cond_stage_models[model_idx].embed_mode = "text"
+                # else:
+                #     self.cond_stage_model_metadata[key]["cond_stage_key"] = "waveform"
+                #     self.cond_stage_models[model_idx].embed_mode = "audio"
+
+                # always use audio if the batch has no text condition
+                self.cond_stage_model_metadata[key]["cond_stage_key"] = "waveform"
+                self.cond_stage_models[model_idx].embed_mode = "audio"
 
     def on_validation_epoch_start(self) -> None:
         # Use text as condition during validation
@@ -741,7 +745,7 @@ class DDPM(pl.LightningModule):
 
     def get_validation_folder_name(self):
         now = datetime.datetime.now()
-        timestamp = now.strftime("%m-%d-%H:%M")
+        timestamp = now.strftime("%m-%d-%H%M")
         return "val_%s_%s_cfg_scale_%s_ddim_%s_n_cand_%s" % (
             self.global_step,
             timestamp,
