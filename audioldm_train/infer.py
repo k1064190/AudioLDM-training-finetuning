@@ -95,8 +95,9 @@ def infer(data, configs, exp_name, ts=0.5, style=None):
         mels = []
         for e in style:
             original_audio_file_path = e
-            audio_file_duration = get_duration(original_audio_file_path)
-            duration = round_up_duration(audio_file_duration)
+            # audio_file_duration = get_duration(original_audio_file_path)
+            # duration = round_up_duration(audio_file_duration)
+            duration = 10
             mel, log_mel, waveform = wav_to_fbank(original_audio_file_path, target_length=int(duration * 102.4),
                                               fn_STFT=fn_STFT)
             mels.append(mel)
