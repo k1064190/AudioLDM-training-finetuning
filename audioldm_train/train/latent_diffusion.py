@@ -187,7 +187,6 @@ def main(configs, config_yaml_path, exp_group_name, exp_name, perform_validation
                     size_mismatch_keys.append(key)
 
             # if(len(key_not_in_model_state_dict) != 0 or len(size_mismatch_keys) != 0):
-            # print("⛳", end=" ")
 
             # print("==> Warning: The following key in the checkpoint is not presented in the model:", key_not_in_model_state_dict)
             # print("==> Warning: These keys have different size between checkpoint and current model: ", size_mismatch_keys)
@@ -197,6 +196,7 @@ def main(configs, config_yaml_path, exp_group_name, exp_name, perform_validation
         # if(perform_validation):
         #     trainer.validate(latent_diffusion, val_loader)
 
+        # set model device to the first device
         trainer.fit(latent_diffusion, loader, val_loader)
     else:
         trainer.fit(
