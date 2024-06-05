@@ -1,12 +1,17 @@
-[![arXiv](https://img.shields.io/badge/arXiv-2301.12503-brightgreen.svg?style=flat-square)](https://arxiv.org/abs/2301.12503) [![arXiv](https://img.shields.io/badge/arXiv-2308.05734-brightgreen.svg?style=flat-square)](https://arxiv.org/abs/2308.05734)
-
 # 🔊 MusicCLAP
+- [How it works](#how-it-works)
+- [Examples](#examples)
 - [Prepare Python running environment](#prepare-python-running-environment)
   * [Download checkpoints](#download-checkpoints)
 - [Play around with the code](#play-around-with-the-code)
 - [Inference with the model](#inference-with-the-model)
 - [Train the model using your own dataset](#train-the-model-using-your-own-dataset)
 - [Cite this work](#cite-this-work)
+
+# How it works
+![](figures/flowwork.png)
+
+# Examples
 
 # Prepare Python running environment
 
