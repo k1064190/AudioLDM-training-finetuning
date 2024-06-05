@@ -391,16 +391,15 @@ class QKVAttentionLegacy(nn.Module):
         bs, width, length = qkv.shape
         assert width % (3 * self.n_heads) == 0
         ch = width // (3 * self.n_heads)
-        scale = 1 / math.sqrt(math.sqrt(ch))
         q, k, v = (
             qkv.reshape(bs * self.n_heads, ch * 3, length).contiguous().split(ch, dim=1)
         )
+        scale = 1 / math.sqrt(math.sqrt(ch))
         weight = th.einsum(
             "bct,bcs->bts", q * scale, k * scale
         )  # More stable with f16 than dividing afterwards
         weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
         a = th.einsum("bts,bcs->bct", weight, v)
-
         return a.reshape(bs, -1, length).contiguous()
 
     @staticmethod
@@ -426,25 +425,20 @@ class QKVAttention(nn.Module):
         bs, width, length = qkv.shape
         assert width % (3 * self.n_heads) == 0
         ch = width // (3 * self.n_heads)
+        q, k, v = qkv.chunk(3, dim=1)
         scale = 1 / math.sqrt(math.sqrt(ch))
-        # qkv to (batch_size, seqlen, 3, nheads, headdim)
-        qkv = qkv.reshape(bs, self.n_heads, 3, ch, length).permute(0, 3, 2, 1, 4)   # (bs, ch, 3, n_heads, length)
-        # q, k, v = qkv.chunk(3, dim=1)
-        # weight = th.einsum(
-        #     "bct,bcs->bts",
-        #     (q * scale).view(bs * self.n_heads, ch, length),
-        #     (k * scale).view(bs * self.n_heads, ch, length),
-        # )  # More stable with f16 than dividing afterwards
-        # weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
-        # a = th.einsum(
-        #     "bts,bcs->bct",
-        #     weight,
-        #     v.reshape(bs * self.n_heads, ch, length).contiguous(),
-        # )
-        # return a.reshape(bs, -1, length).contiguous()
-        a = flash_attn_qkvpacked_func(qkv, dropout=0.0, softmax_scale=None) # [bs, ch, n_heads, length]
-        a = a.permute(0, 2, 1, 3).reshape(bs, -1, length)
-        return a.contiguous()
+        weight = th.einsum(
+            "bct,bcs->bts",
+            (q * scale).view(bs * self.n_heads, ch, length),
+            (k * scale).view(bs * self.n_heads, ch, length),
+        )  # More stable with f16 than dividing afterwards
+        weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
+        a = th.einsum(
+            "bts,bcs->bct",
+            weight,
+            v.reshape(bs * self.n_heads, ch, length).contiguous(),
+        )
+        return a.reshape(bs, -1, length).contiguous()
 
     @staticmethod
     def count_flops(model, _x, y):
